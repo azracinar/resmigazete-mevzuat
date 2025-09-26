@@ -1,7 +1,7 @@
 name: Daily Resmigazete Scraper (Self-hosted)
 on:
   schedule:
-    - cron: '0 7 * * *'   # 10:00 TR (UTC+3)
+    - cron: '37 21 * * *'   # 10:00 TR (UTC+3)
   workflow_dispatch:
 
 jobs:
