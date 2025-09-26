@@ -65,25 +65,23 @@ def _http_session() -> requests.Session:
 
 # ---- HTTP endpoint ----
 @app.route(route="scrape", methods=["GET"])
+@app.route(route="scrape", methods=["GET"])
 def scrape(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Always returns today's JSON (uploaded by GitHub Actions) from Azure Blob Storage.
+    """
     try:
-        # Always use today's date in Turkey local time
-        today = datetime.now(ZoneInfo("Europe/Istanbul"))
-        tarih_str     = today.strftime("%Y%m%d")
-        tarih_str_xls = today.strftime("%d.%m.%Y")
+        conn_str = os.environ["AZURE_STORAGE_CONNECTION_STRING"]
 
-        #eskiler = f"https://www.resmigazete.gov.tr/eskiler/{y}/{m}/{tarih_str}.htm"
-        ana_url = f"https://www.resmigazete.gov.tr/default.aspx"
+        # Format today’s date as DD.MM.YYYY
+        today_str = datetime.utcnow().strftime("%d.%m.%Y")
+        target_name = f"{FILE_PREFIX}{today_str}{FILE_SUFFIX}"
 
-        s = _http_session()
-        r = s.get(ana_url, timeout=100)
-        # Gün sayfası yoksa boş liste döndür (ör. resmi tatil/güncel değil)
-        if r.status_code == 404: 
-            return r.status_code
-        elif not (r.text or "").strip():
-            return func.HttpResponse("Resmi tatil", mimetype="application/json", status_code=200)
-        r.raise_for_status()
+        blob_service = BlobServiceClient.from_connection_string(conn_str)
+        container    = blob_service.get_container_client(CONTAINER_NAME)
 
+        blob = container.download_blob(target_name).readall()
+        
         soup = BeautifulSoup(r.text, "html.parser")
 
         rows = []
@@ -124,15 +122,18 @@ def scrape(req: func.HttpRequest) -> func.HttpResponse:
         # JSON döndür
         df = pd.DataFrame(rows)
         return func.HttpResponse(
-            df.to_json(orient="records", force_ascii=False),
+            body=blob,
+            status_code=200,
             mimetype="application/json",
-            status_code=200
+            headers={"Cache-Control": "no-store"}
         )
 
     except requests.exceptions.Timeout:
         return func.HttpResponse("[]", mimetype="application/json", status_code=200)
     except Exception as e:
         return func.HttpResponse(
-            f"Error while preparing date: {str(e)}",
-            status_code=500
+            json.dumps({"error": str(e)}),
+            status_code=500, mimetype="application/json"
+        )
+
         )
