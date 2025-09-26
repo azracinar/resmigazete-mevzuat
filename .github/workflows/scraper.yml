@@ -10,25 +10,29 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pandas requests beautifulsoup4 openpyxl azure-storage-blob
+        run: pip install -r requirements.txt
 
       - name: Run scraper
         run: python function_app.py
 
-      - name: Upload JSON to Azure Blob
-        uses: azure/storage-blob-upload-action@v1
+      - name: Azure Login
+        uses: azure/login@v1
         with:
-          connection_string: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
-          container_name: resmigazete
-          source: "*.json"
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Upload JSON to Azure Blob
+        run: |
+          az storage blob upload \
+            --account-name resmigazetesa12345 \
+            --container-name resmigazete \
+            --name resmigazete_$(date +'%d.%m.%Y').json \
+            --file resmigazete_$(date +'%d.%m.%Y').json \
+            --auth-mode login
