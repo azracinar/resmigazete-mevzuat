@@ -2,7 +2,7 @@ name: Daily Resmigazete Scraper
 
 on:
   schedule:
-    - cron: '45 21 * * *'   # 00:45 Istanbul (UTC+3)
+    - cron: '00 07 * * *'   # 10:00AM Istanbul (UTC+3)
   workflow_dispatch:
 
 jobs:
