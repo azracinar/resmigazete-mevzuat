@@ -73,22 +73,31 @@ def scrape_resmigazete() -> list[dict]:
 # ---- HTTP endpoint ----
 @app.route(route="scrape", methods=["GET"])
 def scrape(req: func.HttpRequest) -> func.HttpResponse:
-    """Return today's JSON file from Blob Storage."""
+    """Always return the latest JSON file from Blob Storage."""
     try:
         conn_str = os.environ["AZURE_STORAGE_CONNECTION_STRING"]
-        today_str = datetime.utcnow().strftime("%d.%m.%Y")
-        target_name = f"{FILE_PREFIX}{today_str}{FILE_SUFFIX}"
-
         blob_service = BlobServiceClient.from_connection_string(conn_str)
         container = blob_service.get_container_client(CONTAINER_NAME)
 
-        blob = container.download_blob(target_name).readall()
+        # Find the latest blob
+        blobs = list(container.list_blobs())
+        if not blobs:
+            return func.HttpResponse(
+                json.dumps({"error": "No JSON files found in container."}),
+                status_code=404,
+                mimetype="application/json",
+            )
+
+        latest_blob = max(blobs, key=lambda b: b.last_modified)
+        blob_data = container.get_blob_client(latest_blob.name).download_blob().readall()
+
         return func.HttpResponse(
-            body=blob,
+            body=blob_data,
             status_code=200,
             mimetype="application/json",
             headers={"Cache-Control": "no-store"},
         )
+
     except Exception as e:
         return func.HttpResponse(
             json.dumps({"error": str(e)}),
@@ -104,5 +113,7 @@ if __name__ == "__main__":
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     print(f"✅ Saved {filename}")
+
+
 
 
