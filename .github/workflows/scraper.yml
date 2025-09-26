@@ -6,7 +6,8 @@ on:
 
 jobs:
   scrape_and_upload:
-    runs-on: self-hosted   # <- your own runner
+    runs-on: ubuntu-latest
+   
     steps:
       - uses: actions/checkout@v4
 
