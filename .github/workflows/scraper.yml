@@ -7,25 +7,20 @@ on:
 jobs:
   build:
     runs-on: self-hosted
+
     steps:
       - uses: actions/checkout@v3
+
       - name: Set up venv
         run: |
-          python3 -m venv .exa
-          source .exa/bin/activate
+          python3 -m venv .venv
+          source .venv/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt
 
-
-      - name: Check Python
-        run: python3 --version
-
-      - name: Install dependencies
-        run: pip3 install -r requirements.txt
-
       - name: Run scraper
         run: |
-          source .exa/bin/activate
+          source .venv/bin/activate
           python function_app.py
 
 
