@@ -9,6 +9,13 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
+      - name: Set up venv
+        run: |
+          python3 -m venv .exa
+          source .exa/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
 
       - name: Check Python
         run: python3 --version
@@ -17,7 +24,10 @@ jobs:
         run: pip3 install -r requirements.txt
 
       - name: Run scraper
-        run: python3 function_app.py
+        run: |
+          source .exa/bin/activate
+          python function_app.py
+
 
       - name: Azure Login
         uses: azure/login@v1
