@@ -2,4 +2,8 @@ azure-functions
 requests
 beautifulsoup4
 pandas
+azure-storage-blob
+beautifulsoup4
+openpyxl
+
 
