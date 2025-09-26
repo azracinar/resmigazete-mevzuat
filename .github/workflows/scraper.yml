@@ -1,15 +1,15 @@
 name: Daily Resmigazete Scraper
+
 on:
   schedule:
-    - cron: '00 22 * * *'   # 10:00 TR (UTC+3)
+    - cron: '45 21 * * *'   # 00:45 Istanbul (UTC+3)
   workflow_dispatch:
 
 jobs:
-  build:
+  scrape:
     runs-on: self-hosted
-
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up venv
         run: |
@@ -23,7 +23,6 @@ jobs:
           source .venv/bin/activate
           python function_app.py
 
-
       - name: Azure Login
         uses: azure/login@v1
         with:
@@ -33,8 +32,9 @@ jobs:
         run: |
           FILE=$(ls resmigazete_*.json | tail -n 1)
           az storage blob upload \
-            --account-name resmigazetesa12345 \
+            --account-name resmigazete12345 \
             --container-name resmigazete \
             --name "$FILE" \
             --file "$FILE" \
-            --auth-mode login
+            --auth-mode login \
+            --overwrite true
