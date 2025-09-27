@@ -16,6 +16,27 @@ CONTAINER_NAME = "resmigazete"
 FILE_PREFIX = "resmigazete_"
 FILE_SUFFIX = ".json"
 
+# --- filter out the footer of the page ----
+BLACKLIST = [
+    "Genel Arama",
+    "Arşiv",
+    "Mükerrer Arşivi",
+    "Resmî Gazete Tarihçesi",
+    "Resmî Gazete Mevzuatı",
+    "Mevzuat Bilgi Sistemi",
+    "0 (312) 525 3427",
+    "Bize Ulaşın",
+    "Haritada göster"
+]
+
+# --- to indicate whether Yeni Yonetmelik or Yonetmelik Degisikligi ---
+DEGISIKLIK_KEYWORDS = [
+    "değişikliği",
+    "değiştirilmesine",
+    "değişiklik yapılmasına",
+    "değiştirilmiş"
+]
+
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
 # ---- helpers ----
@@ -29,6 +50,23 @@ def _classify(baslik: str) -> str:
     if "karar" in t:                           return "Karar"
     if "ilan" in t:                            return "İlan"
     return "Diğer"
+
+def classify_yonetmelik(title: str) -> str:
+    title_lower = title.lower()
+    for kw in DEGISIKLIK_KEYWORDS:
+        if kw in title_lower:
+            return "Değişiklik"
+    return "Yeni"
+
+def extract_text_from_page(link: str) -> str:
+    try:
+        resp = requests.get(link, timeout=15)
+        resp.encoding = "utf-8"
+        soup = BeautifulSoup(resp.text, "html.parser")
+        main_text = soup.get_text(separator="\n", strip=True)
+        return main_text
+    except Exception as e:
+        return f"[Hata: {e}]"
 
 def _http_session() -> requests.Session:
     s = requests.Session()
@@ -45,29 +83,45 @@ def _http_session() -> requests.Session:
 def scrape_resmigazete() -> list[dict]:
     """Scrape today's Resmî Gazete and return rows as list of dicts."""
     url = "https://www.resmigazete.gov.tr/"
-    s = _http_session()
-    r = s.get(url, timeout=60)
+    r = requests.get(url, timeout=60)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
 
     today_str = datetime.utcnow().strftime("%d.%m.%Y")
     rows = []
+
     for tag in soup.find_all(["a", "td"]):
         baslik = tag.get_text(strip=True)
         if len(baslik) < 5:
             continue
         href = tag.get("href")
-        full_url = urljoin(url, href) if href else None
-        if not full_url or "tarihli ve" in baslik.lower():
+        link = urljoin(url, href) if href else None
+        if not link or "tarihli ve" in baslik.lower():
+            continue
+        if baslik in BLACKLIST:
             continue
 
         kategori = _classify(baslik)
-        rows.append({
+
+        row = {
             "Tarih": today_str,
             "Kategori": kategori,
             "Başlık": baslik,
-            "Link": full_url,
-        })
+        }
+
+        if kategori == "Yönetmelik":
+            yonetmelik_turu = classify_yonetmelik(baslik)
+            row["Yönetmelik Türü"] = yonetmelik_turu
+
+            if yonetmelik_turu == "Yeni":
+                row["Link"] = link
+            else:  # Degisiklik
+                row["Tam Metin"] = extract_text_from_page(link)
+        else:
+            row["Link"] = link
+
+        rows.append(row)
+
     return rows
 
 # ---- HTTP endpoint ----
@@ -113,6 +167,7 @@ if __name__ == "__main__":
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     print(f"✅ Saved {filename}")
+
 
 
 
