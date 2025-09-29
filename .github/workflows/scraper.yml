@@ -38,3 +38,10 @@ jobs:
             --file "$FILE" \
             --auth-mode login \
             --overwrite true
+
+          - name: Upload JSON result
+            uses: actions/upload-artifact@v4
+            with:
+              name: scraped-results
+              path: "*.json"
+
