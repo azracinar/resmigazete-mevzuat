@@ -1,7 +1,6 @@
 import os
 import re
 import json
-import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
@@ -58,33 +57,45 @@ def classify_yonetmelik(title: str) -> str:
             return "Değişiklik"
     return "Yeni"
 
-def extract_text_from_page(link: str) -> str:
-    try:
-        resp = requests.get(link, timeout=15)
-        resp.encoding = "utf-8"
-        soup = BeautifulSoup(resp.text, "html.parser")
-        main_text = soup.get_text(separator="\n", strip=True)
-        return main_text
-    except Exception as e:
-        return f"[Hata: {e}]"
+# --- Retry-enabled HTTP session ---
+def _http_session():
+    """Create a requests session with retries and backoff."""
+    session = requests.Session()
+    retries = Retry(
+        total=5,                 # retry up to 5 times
+        backoff_factor=2,        # wait 2s, 4s, 8s, 16s...
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=["GET"]
+    )
+    adapter = HTTPAdapter(max_retries=retries)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
 
-def _http_session() -> requests.Session:
-    s = requests.Session()
-    retries = Retry(total=3, backoff_factor=1,
-                    status_forcelist=[429, 500, 502, 503, 504],
-                    allowed_methods=["GET"], raise_on_status=False)
-    s.mount("https://", HTTPAdapter(max_retries=retries))
-    s.mount("http://", HTTPAdapter(max_retries=retries))
-    s.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    })
-    return s
+def extract_text_from_page(link: str) -> str:
+    """Extract full text from a given Resmî Gazete detail page."""
+    s = _http_session()
+    try:
+        r = s.get(link, timeout=20)
+        r.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        return f"Hata: Sayfa alınamadı ({e})"
+
+    soup = BeautifulSoup(r.text, "html.parser")
+    content = soup.get_text(separator="\n", strip=True)
+    return content[:2000]  # prevent storing overly large text
 
 def scrape_resmigazete() -> list[dict]:
     """Scrape today's Resmî Gazete and return rows as list of dicts."""
     url = "https://www.resmigazete.gov.tr/"
-    r = requests.get(url, timeout=60)
-    r.raise_for_status()
+    s = _http_session()
+
+    try:
+        r = s.get(url, timeout=20)
+        r.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        return [{"error": f"Failed to fetch Resmî Gazete: {e}"}]
+        
     soup = BeautifulSoup(r.text, "html.parser")
 
     today_str = datetime.utcnow().strftime("%d.%m.%Y")
@@ -137,7 +148,7 @@ def scrape(req: func.HttpRequest) -> func.HttpResponse:
         blobs = list(container.list_blobs())
         if not blobs:
             return func.HttpResponse(
-                json.dumps({"error": "No JSON files found in container."}),
+                json.dumps({"error": "No JSON files found in container."}, ensure_ascii=False, indent=2),
                 status_code=404,
                 mimetype="application/json",
             )
@@ -154,7 +165,7 @@ def scrape(req: func.HttpRequest) -> func.HttpResponse:
 
     except Exception as e:
         return func.HttpResponse(
-            json.dumps({"error": str(e)}),
+            json.dumps({"error": str(e)}, ensure_ascii=False, indent=2),
             status_code=500,
             mimetype="application/json",
         )
@@ -167,6 +178,7 @@ if __name__ == "__main__":
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     print(f"✅ Saved {filename}")
+
 
 
 
